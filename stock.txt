@@ -1,0 +1,22 @@
+1,Laptop Dell Inspiron,2450.0,1
+2,Wireless Mouse Logitech,45.5,9
+3,Mechanical Keyboard Redragon,180.0,10
+6,External HDD 1TB,310.0,111
+7,Gaming Headset HyperX,275.0,255
+8,Office Chair Ergonomic,890.0,78
+9,Webcam HD 1080p,95.0,55
+10,Printer HP LaserJet,760.0,85
+12,Router TP-Link AX3000,210.0,30
+13,Smartphone Samsung A54,1450.0,59
+14,Tablet Lenovo M10,980.0,466
+15,Power Bank 20000mAh,85.0,36
+16,Bluetooth Speaker JBL,150.0,45
+17,SSD Kingston 512GB,260.0,78
+18,RAM Corsair 16GB,195.0,45
+19,Gaming Mouse Pad XL,35.0,455
+20,LED Desk Lamp,60.0,78
+21,New Product,10.0,45
+22,New Product,10.0,78
+23,test,1250.0,36
+24,vvv,1455.0,258
+28,dd,117.0,444
