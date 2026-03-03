@@ -232,4 +232,49 @@ public class StockManager {
             System.out.println("Error loading stock.");
         }
     }
+
+
+        /* ===============================
+       export   To  CSV
+       =============================== */
+
+    public void exportToCSV(File file) {
+
+        try (FileWriter fw = new FileWriter(file)) {
+
+            fw.write("ID;Name;Price;Quantity\n");
+
+            for (StockItem item : stock.values()) {
+
+                Product p = item.getProduct();
+
+                fw.write(
+                        p.id() + ";" +
+                                p.name() + ";" +
+                                p.price() + ";" +
+                                item.getQuantity() + "\n"
+                );
+            }
+
+            System.out.println("CSV export successful.");
+
+        } catch (IOException e) {
+            System.out.println("Error exporting CSV.");
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 }

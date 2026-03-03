@@ -6,7 +6,9 @@ import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
 import javafx.util.converter.IntegerStringConverter;
+import java.io.File;
 
+@SuppressWarnings("ALL")
 public class InventoryApp extends Application {
 
     private final StockManager manager = new StockManager();
@@ -49,12 +51,14 @@ public class InventoryApp extends Application {
 
     private ToolBar createToolbar() {
 
-
+        Button export = new Button("Export CSV");
         Button delete = new Button("Delete");
         Button refresh = new Button("Refresh");
 
         delete.setOnAction(e -> deleteProduct());
         refresh.setOnAction(e -> refreshTable());
+        export.setOnAction(e -> exportCSV());
+
 
         searchField.setPromptText("Search product...");
         searchField.textProperty()
@@ -64,9 +68,9 @@ public class InventoryApp extends Application {
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         return new ToolBar(
-                 delete,
+                delete,
+                export,
                 new Separator(),
-
                 searchField
         );
     }
@@ -77,6 +81,8 @@ public class InventoryApp extends Application {
 
         table.setEditable(true);
 
+        /* ================= ID COLUMN ================= */
+
         TableColumn<Product,Integer> id =
                 new TableColumn<>("ID");
 
@@ -84,6 +90,8 @@ public class InventoryApp extends Application {
                 new javafx.beans.property
                         .SimpleIntegerProperty(
                         d.getValue().id()).asObject());
+
+        /* ================= NAME COLUMN (EDITABLE) ================= */
 
         TableColumn<Product,String> name =
                 new TableColumn<>("Name");
@@ -93,16 +101,80 @@ public class InventoryApp extends Application {
                         .SimpleStringProperty(
                         d.getValue().name()));
 
-        TableColumn<Product,String> price =
+        name.setCellFactory(TextFieldTableCell.forTableColumn());
+
+        name.setOnEditCommit(event -> {
+
+            Product product = event.getRowValue();
+            String newName = event.getNewValue();
+
+            if(newName == null || newName.trim().length() < 3){
+                alert("Name must contain at least 3 characters.");
+                refreshTable();
+                return;
+            }
+
+            manager.updateProductName(product.id(), newName.trim());
+            refreshTable();
+        });
+
+        /* ================= PRICE COLUMN (EDITABLE) ================= */
+
+        TableColumn<Product, Double> price =
                 new TableColumn<>("Price");
 
         price.setCellValueFactory(d ->
                 new javafx.beans.property
-                        .SimpleStringProperty(
-                        d.getValue().formattedPrice()));
+                        .SimpleDoubleProperty(
+                        d.getValue().price()).asObject());
+
+        price.setCellFactory(col -> new TextFieldTableCell<>(
+                new javafx.util.converter.DoubleStringConverter()) {
+
+            @Override
+            public void updateItem(Double value, boolean empty) {
+                super.updateItem(value, empty);
+
+                if (empty || value == null) {
+                    setText(null);
+                } else {
+                    setText(String.format("%.3f DT", value));
+                }
+            }
+        });price.setCellFactory(col -> new TextFieldTableCell<>(
+                new javafx.util.converter.DoubleStringConverter()) {
+
+            @Override
+            public void updateItem(Double value, boolean empty) {
+                super.updateItem(value, empty);
+
+                if (empty || value == null) {
+                    setText(null);
+                } else {
+                    setText(String.format("%.3f DT", value));
+                }
+            }
+        });
+
+        price.setOnEditCommit(event -> {
+
+            Product product = event.getRowValue();
+            double newPrice = event.getNewValue();
+
+            if(newPrice < 0){
+                alert("Price cannot be negative.");
+                refreshTable();
+                return;
+            }
+
+            manager.updateProductPrice(product.id(), newPrice);
+            refreshTable();
+        });
+
+        /* ================= QUANTITY COLUMN (EDITABLE) ================= */
 
         TableColumn<Product,Integer> qty =
-                new TableColumn<>("Qty");
+                new TableColumn<>("Quantity");
 
         qty.setCellValueFactory(d ->
                 new javafx.beans.property
@@ -133,12 +205,14 @@ public class InventoryApp extends Application {
             refreshTable();
         });
 
+        /* ================= TABLE CONFIG ================= */
+
         table.getColumns().setAll(id,name,price,qty);
 
         table.setColumnResizePolicy(
                 TableView.CONSTRAINED_RESIZE_POLICY);
 
-        /* ===== ROW COLORING ===== */
+        /* ================= ROW COLORING ================= */
 
         table.setRowFactory(tv -> new TableRow<>() {
 
@@ -298,45 +372,93 @@ public class InventoryApp extends Application {
 
         updateStatusBar();
     }
-
     private void addProduct() {
 
-        try {
+        String name = nameField.getText().trim();
+        String priceText = priceField.getText().trim();
+        String qtyText = qtyField.getText().trim();
 
-            int id = manager.generateProductId();
-
-            manager.addProduct(
-                    new Product(
-                            id,
-                            nameField.getText(),
-                            Double.parseDouble(
-                                    priceField.getText())),
-                    Integer.parseInt(
-                            qtyField.getText()));
-
-            refreshTable();
-            clear();
-
-        } catch(Exception e){
-            alert("Invalid input");
-        }
-    }
-
-    private void deleteProduct() {
-
-        Product p =
-                table.getSelectionModel()
-                        .getSelectedItem();
-
-        if(p==null){
-            alert("Select product");
+        /* ===== NAME VALIDATION ===== */
+        if(name.isEmpty()){
+            alert("Product name cannot be empty.");
             return;
         }
 
-        manager.deleteProduct(p.id());
-        refreshTable();
-    }
+        if(name.length() < 3){
+            alert("Product name must contain at least 3 characters.");
+            return;
+        }
 
+        /* ===== PRICE VALIDATION ===== */
+        double price;
+
+        try {
+            price = Double.parseDouble(priceText);
+        } catch (NumberFormatException e){
+            alert("Price must be a valid number.");
+            return;
+        }
+
+        if(price <= 0){
+            alert("Price must be greater than 0.");
+            return;
+        }
+
+        /* ===== QUANTITY VALIDATION ===== */
+        int quantity;
+
+        try {
+            quantity = Integer.parseInt(qtyText);
+        } catch (NumberFormatException e){
+            alert("Quantity must be a valid integer.");
+            return;
+        }
+
+        if(quantity < 0){
+            alert("Quantity cannot be negative.");
+            return;
+        }
+
+        /* ===== ADD PRODUCT ===== */
+        int id = manager.generateProductId();
+
+        manager.addProduct(
+                new Product(id, name, price),
+                quantity
+        );
+
+        refreshTable();
+        clear();
+    }
+    private void deleteProduct() {
+
+        Product p = table.getSelectionModel().getSelectedItem();
+
+        if(p == null){
+            alert("Select a product to delete.");
+            return;
+        }
+
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Delete Confirmation");
+        confirm.setHeaderText("Are you sure you want to delete this product?");
+        confirm.setContentText(
+                "Product: " + p.name() +
+                        "\nID: " + p.id()
+        );
+
+        ButtonType yes = new ButtonType("Yes");
+        ButtonType no = new ButtonType("Cancel");
+
+        confirm.getButtonTypes().setAll(yes, no);
+
+        confirm.showAndWait().ifPresent(response -> {
+            if(response == yes){
+                manager.deleteProduct(p.id());
+                refreshTable();
+            }
+        });
+    }
     private void search() {
 
         String text =
@@ -349,10 +471,32 @@ public class InventoryApp extends Application {
                                         .toLowerCase()
                                         .contains(text)));
     }
-
     private void alert(String msg){
         new Alert(Alert.AlertType.INFORMATION,msg)
                 .showAndWait();
+    }
+    private void exportCSV() {
+
+        javafx.stage.FileChooser fileChooser =
+                new javafx.stage.FileChooser();
+
+        fileChooser.setTitle("Save CSV File");
+
+        fileChooser.getExtensionFilters().add(
+                new javafx.stage.FileChooser.ExtensionFilter(
+                        "CSV Files", "*.csv")
+        );
+
+        fileChooser.setInitialFileName("export_stock.csv");
+
+        File file = fileChooser.showSaveDialog(
+                table.getScene().getWindow());
+
+        if(file != null) {
+
+            manager.exportToCSV(file);
+            alert("Stock exported successfully.");
+        }
     }
 
     private void clear(){
@@ -360,6 +504,17 @@ public class InventoryApp extends Application {
         priceField.clear();
         qtyField.clear();
     }
+
+
+
+
+
+
+
+
+
+
+
 
     @SuppressWarnings("unused")
     public static void main(String... args){
