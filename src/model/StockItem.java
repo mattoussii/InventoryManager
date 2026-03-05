@@ -1,3 +1,5 @@
+package model;
+
 public class StockItem {
 
     private Product product;

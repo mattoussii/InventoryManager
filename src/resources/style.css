@@ -1,0 +1,105 @@
+.root {
+    -fx-font-family: "Segoe UI";
+}
+
+/* ================= TOOLBAR ================= */
+
+.tool-bar {
+    -fx-background-color: #2c3e50;
+}
+
+.tool-bar .button {
+    -fx-background-color: #3b82c4;
+    -fx-text-fill: white;
+    -fx-background-radius: 6;
+}
+
+.tool-bar .button:hover {
+    -fx-background-color: #2f6ea6;
+}
+
+/* ================= FORM ================= */
+
+.form-card {
+    -fx-background-color: white;
+    -fx-background-radius: 10;
+    -fx-border-color: #d0d7de;
+    -fx-border-radius: 10;
+}
+
+.form-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.text-field {
+    -fx-background-radius: 6;
+}
+
+.save-button {
+    -fx-background-color: #3498db;
+    -fx-text-fill: white;
+    -fx-background-radius: 6;
+}
+
+.save-button:hover {
+    -fx-background-color: #2980b9;
+}
+
+/* ================= TABLE ================= */
+
+.table-view {
+    -fx-background-color: white;
+    -fx-border-color: #cfd8dc;
+    -fx-border-radius: 6;
+}
+
+.column-header-background {
+    -fx-background-color: #ecf0f1;
+}
+
+.column-header .label {
+    -fx-font-weight: bold;
+    -fx-alignment: CENTER;
+}
+
+/* Hover row */
+
+.table-row-cell:hover {
+    -fx-background-color: #e8f3ff;
+}
+
+/* Selected row */
+
+.table-row-cell:selected {
+    -fx-background-color: #3b82c4;
+}
+
+.table-row-cell:selected .text {
+    -fx-fill: white;
+}
+
+/* ================= STOCK COLORS ================= */
+
+.table-row-cell.critical {
+    -fx-background-color: #f8d7da;
+}
+
+.table-row-cell.warning {
+    -fx-background-color: #fff3cd;
+}
+
+/* ================= STATUS BAR ================= */
+
+.status {
+    -fx-background-color: #bdc3c7;
+}
+
+.status-card {
+    -fx-background-radius: 10;
+}
+
+.status-label {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}

@@ -1,3 +1,8 @@
+package app;
+
+import model.Product;
+import service.StockManager;
+
 import javafx.application.Application;
 import javafx.geometry.*;
 import javafx.scene.Scene;
@@ -6,6 +11,7 @@ import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
 import javafx.util.converter.IntegerStringConverter;
+
 import java.io.File;
 
 @SuppressWarnings("ALL")
@@ -18,8 +24,6 @@ public class InventoryApp extends Application {
     private final TextField priceField = new TextField();
     private final TextField qtyField = new TextField();
     private final TextField searchField = new TextField();
-
-    /* ===== COLORED STATUS LABELS ===== */
 
     private final Label productsLabel = new Label();
     private final Label criticalLabel = new Label();
@@ -37,8 +41,13 @@ public class InventoryApp extends Application {
         root.setRight(createForm());
         root.setBottom(createStatusBar());
 
-        Scene scene = new Scene(root,1000,600);
-        scene.getStylesheets().add("style.css");
+        Scene scene = new Scene(root, 1000, 600);
+
+        scene.getStylesheets().add(
+                getClass()
+                        .getResource("/resources/style.css")
+                        .toExternalForm()
+        );
 
         stage.setTitle("Inventory Manager");
         stage.setScene(scene);
@@ -53,16 +62,13 @@ public class InventoryApp extends Application {
 
         Button export = new Button("Export CSV");
         Button delete = new Button("Delete");
-        Button refresh = new Button("Refresh");
 
         delete.setOnAction(e -> deleteProduct());
-        refresh.setOnAction(e -> refreshTable());
         export.setOnAction(e -> exportCSV());
-
 
         searchField.setPromptText("Search product...");
         searchField.textProperty()
-                .addListener((a,b,c)->search());
+                .addListener((a,b,c) -> search());
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -71,6 +77,7 @@ public class InventoryApp extends Application {
                 delete,
                 export,
                 new Separator(),
+                spacer,
                 searchField
         );
     }
@@ -91,7 +98,12 @@ public class InventoryApp extends Application {
                         .SimpleIntegerProperty(
                         d.getValue().id()).asObject());
 
-        /* ================= NAME COLUMN (EDITABLE) ================= */
+        id.setStyle("-fx-alignment:CENTER;");
+        id.setPrefWidth(60);
+
+
+
+        /* ================= NAME COLUMN ================= */
 
         TableColumn<Product,String> name =
                 new TableColumn<>("Name");
@@ -116,11 +128,16 @@ public class InventoryApp extends Application {
 
             manager.updateProductName(product.id(), newName.trim());
             refreshTable();
+            table.refresh();
         });
 
-        /* ================= PRICE COLUMN (EDITABLE) ================= */
+        name.setPrefWidth(420);
 
-        TableColumn<Product, Double> price =
+
+
+        /* ================= PRICE COLUMN ================= */
+
+        TableColumn<Product,Double> price =
                 new TableColumn<>("Price");
 
         price.setCellValueFactory(d ->
@@ -128,33 +145,24 @@ public class InventoryApp extends Application {
                         .SimpleDoubleProperty(
                         d.getValue().price()).asObject());
 
-        price.setCellFactory(col -> new TextFieldTableCell<>(
-                new javafx.util.converter.DoubleStringConverter()) {
+        price.setStyle("-fx-alignment:CENTER;");
+        price.setPrefWidth(160);
 
-            @Override
-            public void updateItem(Double value, boolean empty) {
-                super.updateItem(value, empty);
+        price.setCellFactory(col ->
+                new TextFieldTableCell<>(
+                        new javafx.util.converter.DoubleStringConverter()) {
 
-                if (empty || value == null) {
-                    setText(null);
-                } else {
-                    setText(String.format("%.3f DT", value));
-                }
-            }
-        });price.setCellFactory(col -> new TextFieldTableCell<>(
-                new javafx.util.converter.DoubleStringConverter()) {
+                    @Override
+                    public void updateItem(Double value, boolean empty) {
 
-            @Override
-            public void updateItem(Double value, boolean empty) {
-                super.updateItem(value, empty);
+                        super.updateItem(value, empty);
 
-                if (empty || value == null) {
-                    setText(null);
-                } else {
-                    setText(String.format("%.3f DT", value));
-                }
-            }
-        });
+                        if(empty || value == null)
+                            setText(null);
+                        else
+                            setText(String.format("%.3f DT", value));
+                    }
+                });
 
         price.setOnEditCommit(event -> {
 
@@ -169,9 +177,12 @@ public class InventoryApp extends Application {
 
             manager.updateProductPrice(product.id(), newPrice);
             refreshTable();
+            table.refresh();
         });
 
-        /* ================= QUANTITY COLUMN (EDITABLE) ================= */
+
+
+        /* ================= QUANTITY COLUMN ================= */
 
         TableColumn<Product,Integer> qty =
                 new TableColumn<>("Quantity");
@@ -179,9 +190,11 @@ public class InventoryApp extends Application {
         qty.setCellValueFactory(d ->
                 new javafx.beans.property
                         .SimpleIntegerProperty(
-                        manager.getQuantity(
-                                d.getValue()))
+                        manager.getQuantity(d.getValue()))
                         .asObject());
+
+        qty.setStyle("-fx-alignment:CENTER;");
+        qty.setPrefWidth(120);
 
         qty.setCellFactory(
                 TextFieldTableCell.forTableColumn(
@@ -198,43 +211,100 @@ public class InventoryApp extends Application {
                 return;
             }
 
-            manager.updateProduct(
-                    product.id(),
-                    newQty);
+            manager.updateProduct(product.id(), newQty);
 
             refreshTable();
+            table.refresh();   // IMPORTANT → forces bar update
         });
+
+
+
+        /* ================= STOCK LEVEL COLUMN ================= */
+
+        TableColumn<Product, Product> stock =
+                new TableColumn<>("Stock Level");
+
+        stock.setCellValueFactory(data ->
+                new javafx.beans.property.SimpleObjectProperty<>(data.getValue()));
+
+        stock.setCellFactory(col -> new TableCell<>() {
+
+            @Override
+            protected void updateItem(Product product, boolean empty) {
+
+                super.updateItem(product, empty);
+
+                if(empty || product == null){
+                    setGraphic(null);
+                    return;
+                }
+
+                int quantity = manager.getQuantity(product);
+
+                int max = manager.getObservableProducts()
+                        .stream()
+                        .mapToInt(p -> manager.getQuantity(p))
+                        .max()
+                        .orElse(1);
+
+                double progress =
+                        (double) quantity / max;
+
+                ProgressBar bar =
+                        new ProgressBar(progress);
+
+                bar.setPrefWidth(140);
+
+                if(quantity < 20)
+                    bar.setStyle("-fx-accent:#e74c3c;");
+                else if(quantity < 50)
+                    bar.setStyle("-fx-accent:#f1c40f;");
+                else
+                    bar.setStyle("-fx-accent:#3498db;");
+
+                setGraphic(bar);
+            }
+        });
+
+        stock.setPrefWidth(200);
+
+
 
         /* ================= TABLE CONFIG ================= */
 
-        table.getColumns().setAll(id,name,price,qty);
+        table.getColumns().setAll(
+                id,
+                name,
+                price,
+                qty,
+                stock
+        );
 
         table.setColumnResizePolicy(
                 TableView.CONSTRAINED_RESIZE_POLICY);
+
+
 
         /* ================= ROW COLORING ================= */
 
         table.setRowFactory(tv -> new TableRow<>() {
 
             @Override
-            protected void updateItem(Product product,
-                                      boolean empty) {
+            protected void updateItem(Product product, boolean empty) {
 
                 super.updateItem(product, empty);
 
-                if(product == null || empty){
-                    setStyle("");
+                getStyleClass().removeAll("critical", "warning");
+
+                if(product == null || empty)
                     return;
-                }
 
                 int q = manager.getQuantity(product);
 
-                if(q < 10)
-                    setStyle("-fx-background-color:#ffb3b3;");
-                else if(q < 20)
-                    setStyle("-fx-background-color:#ffe0b3;");
-                else
-                    setStyle("");
+                if(q < 20)
+                    getStyleClass().add("critical");
+                else if(q < 50)
+                    getStyleClass().add("warning");
             }
         });
 
@@ -242,6 +312,9 @@ public class InventoryApp extends Application {
 
         VBox box = new VBox(table);
         box.setPadding(new Insets(10));
+
+        VBox.setVgrow(table, Priority.ALWAYS);
+
         return box;
     }
 
@@ -250,17 +323,19 @@ public class InventoryApp extends Application {
     private VBox createForm() {
 
         Label title = new Label("Add New Product");
-        title.setStyle(
-                "-fx-font-size:16px;" +
-                        "-fx-font-weight:bold;"
-        );
+        title.getStyleClass().add("form-title");
 
         nameField.setPromptText("Product Name");
         priceField.setPromptText("Price");
         qtyField.setPromptText("Quantity");
 
+        nameField.setMaxWidth(Double.MAX_VALUE);
+        priceField.setMaxWidth(Double.MAX_VALUE);
+        qtyField.setMaxWidth(Double.MAX_VALUE);
+
         Button save = new Button("Save Product");
         save.setMaxWidth(Double.MAX_VALUE);
+        save.getStyleClass().add("save-button");
         save.setOnAction(e -> addProduct());
 
         VBox form = new VBox(12,
@@ -270,14 +345,14 @@ public class InventoryApp extends Application {
                 qtyField,
                 save);
 
-        form.setPadding(new Insets(15));
-        form.setPrefWidth(250);
-        form.getStyleClass().add("form");
+        form.setPadding(new Insets(20));
+        form.setPrefWidth(260);
+        form.getStyleClass().add("form-card");
 
         return form;
     }
 
-    /* ================= COLORED STATUS BAR/ BOX ================= */
+    /* ================= STATUS BAR ================= */
 
     private HBox createStatusBar() {
 
@@ -315,26 +390,22 @@ public class InventoryApp extends Application {
             String bgColor,
             String textColor) {
 
-        label.setStyle(
-                "-fx-text-fill:" + textColor +
-                        "; -fx-font-weight:bold;"
-        );
+        label.getStyleClass().add("status-label");
 
         HBox box = new HBox(label);
-        box.setPadding(
-                new Insets(5,12,5,12));
+        box.setAlignment(Pos.CENTER);
+        box.setPadding(new Insets(8,16,8,16));
+
+        box.getStyleClass().add("status-card");
 
         box.setStyle(
-                "-fx-background-color:" + bgColor + ";" +
-                        "-fx-background-radius:8;" +
-                        "-fx-border-radius:8;"
+                "-fx-background-color:" + bgColor + ";"
         );
 
         return box;
     }
 
-
-    /* ================= LIVE COUNTER ================= */
+    /* ================= STATUS UPDATE ================= */
 
     private void updateStatusBar() {
 
@@ -345,16 +416,14 @@ public class InventoryApp extends Application {
 
         long critical =
                 products.stream()
-                        .filter(p ->
-                                manager.getQuantity(p) < 10)
+                        .filter(p -> manager.getQuantity(p) < 20)
                         .count();
 
         long warning =
                 products.stream()
                         .filter(p -> {
-                            int q =
-                                    manager.getQuantity(p);
-                            return q >= 10 && q < 20;
+                            int q = manager.getQuantity(p);
+                            return q >= 20 && q < 50;
                         })
                         .count();
 
@@ -366,19 +435,16 @@ public class InventoryApp extends Application {
     /* ================= LOGIC ================= */
 
     private void refreshTable() {
-
-        table.setItems(
-                manager.getObservableProducts());
-
+        table.setItems(manager.getObservableProducts());
         updateStatusBar();
     }
+
     private void addProduct() {
 
         String name = nameField.getText().trim();
         String priceText = priceField.getText().trim();
         String qtyText = qtyField.getText().trim();
 
-        /* ===== NAME VALIDATION ===== */
         if(name.isEmpty()){
             alert("Product name cannot be empty.");
             return;
@@ -389,7 +455,6 @@ public class InventoryApp extends Application {
             return;
         }
 
-        /* ===== PRICE VALIDATION ===== */
         double price;
 
         try {
@@ -404,7 +469,6 @@ public class InventoryApp extends Application {
             return;
         }
 
-        /* ===== QUANTITY VALIDATION ===== */
         int quantity;
 
         try {
@@ -419,7 +483,6 @@ public class InventoryApp extends Application {
             return;
         }
 
-        /* ===== ADD PRODUCT ===== */
         int id = manager.generateProductId();
 
         manager.addProduct(
@@ -430,6 +493,7 @@ public class InventoryApp extends Application {
         refreshTable();
         clear();
     }
+
     private void deleteProduct() {
 
         Product p = table.getSelectionModel().getSelectedItem();
@@ -459,6 +523,7 @@ public class InventoryApp extends Application {
             }
         });
     }
+
     private void search() {
 
         String text =
@@ -471,10 +536,12 @@ public class InventoryApp extends Application {
                                         .toLowerCase()
                                         .contains(text)));
     }
+
     private void alert(String msg){
         new Alert(Alert.AlertType.INFORMATION,msg)
                 .showAndWait();
     }
+
     private void exportCSV() {
 
         javafx.stage.FileChooser fileChooser =
@@ -505,18 +572,6 @@ public class InventoryApp extends Application {
         qtyField.clear();
     }
 
-
-
-
-
-
-
-
-
-
-
-
-    @SuppressWarnings("unused")
     public static void main(String... args){
         launch(args);
     }

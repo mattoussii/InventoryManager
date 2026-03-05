@@ -1,8 +1,12 @@
+package service;
+
 import java.io.*;
 import java.util.TreeMap;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import model.Product;
+import model.StockItem;
 
 public class StockManager {
 
@@ -15,16 +19,13 @@ public class StockManager {
     private int nextId = 1;
 
     /* ===============================
-       OBSERVABLE PRODUCTS
+       OBSERVABLE PRODUCT LIST
        =============================== */
-    public ObservableList<Product> getObservableProducts() {
+    private final ObservableList<Product> products =
+            FXCollections.observableArrayList();
 
-        return FXCollections.observableArrayList(
-                stock.values()
-                        .stream()
-                        .map(StockItem::getProduct)
-                        .toList()
-        );
+    public ObservableList<Product> getObservableProducts() {
+        return products;
     }
 
     /* ===============================
@@ -47,13 +48,14 @@ public class StockManager {
         stock.put(product.id(),
                 new StockItem(product, quantity));
 
+        products.add(product);
+
         saveToFile();
     }
 
     /* ===============================
        FIND PRODUCT
        =============================== */
-    @SuppressWarnings("unused")
     public Product findProductById(int id) {
 
         StockItem item = stock.get(id);
@@ -65,8 +67,12 @@ public class StockManager {
        =============================== */
     public void deleteProduct(int id) {
 
-        if (stock.remove(id) != null)
+        StockItem item = stock.remove(id);
+
+        if (item != null) {
+            products.remove(item.getProduct());
             saveToFile();
+        }
     }
 
     /* ===============================
@@ -81,22 +87,23 @@ public class StockManager {
     /* ===============================
        UPDATE NAME
        =============================== */
-    @SuppressWarnings("unused")
     public void updateProductName(int id, String newName) {
 
-        if(newName == null || newName.trim().length() < 3)
+        if (newName == null || newName.trim().length() < 3)
             return;
 
         StockItem item = stock.get(id);
-        if(item == null) return;
+        if (item == null) return;
 
         Product old = item.getProduct();
 
-        item.setProduct(
-                new Product(
-                        old.id(),
-                        newName,
-                        old.price()));
+        Product updated =
+                new Product(old.id(), newName, old.price());
+
+        item.setProduct(updated);
+
+        products.remove(old);
+        products.add(updated);
 
         saveToFile();
     }
@@ -104,21 +111,22 @@ public class StockManager {
     /* ===============================
        UPDATE PRICE
        =============================== */
-    @SuppressWarnings("unused")
     public void updateProductPrice(int id, double newPrice) {
 
-        if(newPrice < 0) return;
+        if (newPrice < 0) return;
 
         StockItem item = stock.get(id);
-        if(item == null) return;
+        if (item == null) return;
 
         Product old = item.getProduct();
 
-        item.setProduct(
-                new Product(
-                        old.id(),
-                        old.name(),
-                        newPrice));
+        Product updated =
+                new Product(old.id(), old.name(), newPrice);
+
+        item.setProduct(updated);
+
+        products.remove(old);
+        products.add(updated);
 
         saveToFile();
     }
@@ -128,7 +136,7 @@ public class StockManager {
        =============================== */
     public void updateProduct(int id, int newQuantity) {
 
-        if(newQuantity < 0) return;
+        if (newQuantity < 0) return;
 
         StockItem item = stock.get(id);
 
@@ -144,7 +152,6 @@ public class StockManager {
     /* ===============================
        LOW STOCK ALERT
        =============================== */
-    @SuppressWarnings("unused")
     public void lowStockAlert() {
 
         boolean found = false;
@@ -216,11 +223,12 @@ public class StockManager {
                 double price = Double.parseDouble(data[2]);
                 int quantity = Integer.parseInt(data[3]);
 
-                stock.put(
-                        id,
-                        new StockItem(
-                                new Product(id,name,price),
-                                quantity));
+                Product p = new Product(id, name, price);
+
+                stock.put(id,
+                        new StockItem(p, quantity));
+
+                products.add(p);
 
                 if (id >= nextId)
                     nextId = id + 1;
@@ -233,11 +241,9 @@ public class StockManager {
         }
     }
 
-
-        /* ===============================
-       export   To  CSV
+    /* ===============================
+       EXPORT TO CSV
        =============================== */
-
     public void exportToCSV(File file) {
 
         try (FileWriter fw = new FileWriter(file)) {
@@ -262,19 +268,4 @@ public class StockManager {
             System.out.println("Error exporting CSV.");
         }
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
