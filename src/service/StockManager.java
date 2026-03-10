@@ -7,6 +7,7 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import model.Product;
 import model.StockItem;
+import model.Sale;
 
 public class StockManager {
 
@@ -98,7 +99,13 @@ public class StockManager {
         Product old = item.getProduct();
 
         Product updated =
-                new Product(old.id(), newName, old.price());
+                new Product(
+                        old.id(),
+                        newName,
+                        old.price(),
+                        old.maxStock(),
+                        old.description()
+                );
 
         item.setProduct(updated);
 
@@ -121,7 +128,13 @@ public class StockManager {
         Product old = item.getProduct();
 
         Product updated =
-                new Product(old.id(), old.name(), newPrice);
+                new Product(
+                        old.id(),
+                        old.name(),
+                        newPrice,
+                        old.maxStock(),
+                        old.description()
+                );
 
         item.setProduct(updated);
 
@@ -147,6 +160,69 @@ public class StockManager {
 
         item.setQuantity(newQuantity);
         saveToFile();
+    }
+
+    /* ===============================
+       SELL PRODUCT
+       =============================== */
+    public boolean sellProduct(
+            int productId,
+            int qty,
+            String clientName,
+            String clientPhone
+    ) {
+
+        StockItem item = stock.get(productId);
+
+        if (item == null)
+            return false;
+
+        if (qty <= 0)
+            return false;
+
+        if (item.getQuantity() < qty)
+            return false;
+
+        item.setQuantity(item.getQuantity() - qty);
+
+        Product product = item.getProduct();
+
+        logSale(new Sale(
+                product.id(),
+                product.name(),
+                clientName,
+                clientPhone,
+                qty,
+                product.price(),
+                System.currentTimeMillis()
+        ));
+
+        saveToFile();
+
+        return true;
+    }
+
+    /* ===============================
+       LOG SALE
+       =============================== */
+    private void logSale(Sale sale) {
+
+        try (FileWriter fw =
+                     new FileWriter("sales_log.csv", true)) {
+
+            fw.write(
+                    sale.productId() + "," +
+                            sale.productName() + "," +
+                            sale.clientName() + "," +
+                            sale.clientPhone() + "," +
+                            sale.quantity() + "," +
+                            sale.price() + "," +
+                            sale.timestamp() + "\n"
+            );
+
+        } catch (IOException e) {
+            System.out.println("Error logging sale.");
+        }
     }
 
     /* ===============================
@@ -223,7 +299,7 @@ public class StockManager {
                 double price = Double.parseDouble(data[2]);
                 int quantity = Integer.parseInt(data[3]);
 
-                Product p = new Product(id, name, price);
+                Product p = new Product(id, name, price,100,"");
 
                 stock.put(id,
                         new StockItem(p, quantity));
@@ -268,4 +344,24 @@ public class StockManager {
             System.out.println("Error exporting CSV.");
         }
     }
+
+    /* ===============================
+      get Stock lvl of max stock
+       =============================== */
+    public double getStockRatio(Product product) {
+
+        StockItem item = stock.get(product.id());
+
+        if (item == null)
+            return 0;
+
+        int quantity = item.getQuantity();
+        int max = product.maxStock();
+
+        if (max == 0)
+            return 0;
+
+        return (double) quantity / max;
+    }
+
 }

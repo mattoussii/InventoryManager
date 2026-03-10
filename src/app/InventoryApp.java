@@ -24,6 +24,10 @@ public class InventoryApp extends Application {
     private final TextField priceField = new TextField();
     private final TextField qtyField = new TextField();
     private final TextField searchField = new TextField();
+    private final TextField maxStockField = new TextField();
+    private final TextArea descriptionArea = new TextArea();
+
+
 
     private final Label productsLabel = new Label();
     private final Label criticalLabel = new Label();
@@ -214,7 +218,7 @@ public class InventoryApp extends Application {
             manager.updateProduct(product.id(), newQty);
 
             refreshTable();
-            table.refresh();   // IMPORTANT → forces bar update
+            table.refresh();
         });
 
 
@@ -239,25 +243,19 @@ public class InventoryApp extends Application {
                     return;
                 }
 
-                int quantity = manager.getQuantity(product);
-
-                int max = manager.getObservableProducts()
-                        .stream()
-                        .mapToInt(p -> manager.getQuantity(p))
-                        .max()
-                        .orElse(1);
-
                 double progress =
-                        (double) quantity / max;
+                        manager.getStockRatio(product);
 
                 ProgressBar bar =
                         new ProgressBar(progress);
 
                 bar.setPrefWidth(140);
 
-                if(quantity < 20)
+                double ratio = manager.getStockRatio(product);
+
+                if(ratio <= 0.20)
                     bar.setStyle("-fx-accent:#e74c3c;");
-                else if(quantity < 50)
+                else if(ratio <= 0.50)
                     bar.setStyle("-fx-accent:#f1c40f;");
                 else
                     bar.setStyle("-fx-accent:#3498db;");
@@ -285,27 +283,46 @@ public class InventoryApp extends Application {
 
 
 
-        /* ================= ROW COLORING ================= */
+        /* =================Enable Double-Click Opening + ROW COLORING ================= */
 
-        table.setRowFactory(tv -> new TableRow<>() {
+        table.setRowFactory(tv -> {
 
-            @Override
-            protected void updateItem(Product product, boolean empty) {
+            TableRow<Product> row = new TableRow<>() {
 
-                super.updateItem(product, empty);
+                @Override
+                protected void updateItem(Product product, boolean empty) {
 
-                getStyleClass().removeAll("critical", "warning");
+                    super.updateItem(product, empty);
 
-                if(product == null || empty)
-                    return;
+                    getStyleClass().removeAll("critical", "warning");
 
-                int q = manager.getQuantity(product);
+                    if(product == null || empty)
+                        return;
 
-                if(q < 20)
-                    getStyleClass().add("critical");
-                else if(q < 50)
-                    getStyleClass().add("warning");
-            }
+                    double ratio = manager.getStockRatio(product);
+
+                    if(ratio <= 0.20)
+                        getStyleClass().add("critical");
+                    else if(ratio <= 0.50)
+                        getStyleClass().add("warning");
+                }
+            };
+
+            row.setOnMouseClicked(event -> {
+
+                if(event.getClickCount() == 2 && !row.isEmpty()) {
+
+                    Product product = row.getItem();
+
+                    new ProductDetailsView(
+                            manager,
+                            product,
+                            this::refreshTable
+                    ).show();
+                }
+            });
+
+            return row;
         });
 
         refreshTable();
@@ -327,23 +344,34 @@ public class InventoryApp extends Application {
 
         nameField.setPromptText("Product Name");
         priceField.setPromptText("Price");
-        qtyField.setPromptText("Quantity");
+        qtyField.setPromptText("Initial Quantity");
+        maxStockField.setPromptText("Max Capacity");
+
+        descriptionArea.setPromptText("Product Description");
+        descriptionArea.setPrefRowCount(4);
 
         nameField.setMaxWidth(Double.MAX_VALUE);
         priceField.setMaxWidth(Double.MAX_VALUE);
         qtyField.setMaxWidth(Double.MAX_VALUE);
+        maxStockField.setMaxWidth(Double.MAX_VALUE);
+        descriptionArea.setMaxWidth(Double.MAX_VALUE);
 
         Button save = new Button("Save Product");
         save.setMaxWidth(Double.MAX_VALUE);
         save.getStyleClass().add("save-button");
+
         save.setOnAction(e -> addProduct());
 
-        VBox form = new VBox(12,
+        VBox form = new VBox(
+                12,
                 title,
                 nameField,
                 priceField,
                 qtyField,
-                save);
+                maxStockField,
+                descriptionArea,
+                save
+        );
 
         form.setPadding(new Insets(20));
         form.setPrefWidth(260);
@@ -351,7 +379,6 @@ public class InventoryApp extends Application {
 
         return form;
     }
-
     /* ================= STATUS BAR ================= */
 
     private HBox createStatusBar() {
@@ -416,14 +443,14 @@ public class InventoryApp extends Application {
 
         long critical =
                 products.stream()
-                        .filter(p -> manager.getQuantity(p) < 20)
+                        .filter(p -> manager.getStockRatio(p) <= 0.20)
                         .count();
 
         long warning =
                 products.stream()
                         .filter(p -> {
-                            int q = manager.getQuantity(p);
-                            return q >= 20 && q < 50;
+                            double r = manager.getStockRatio(p);
+                            return r > 0.20 && r <= 0.50;
                         })
                         .count();
 
@@ -437,6 +464,7 @@ public class InventoryApp extends Application {
     private void refreshTable() {
         table.setItems(manager.getObservableProducts());
         updateStatusBar();
+        table.refresh();
     }
 
     private void addProduct() {
@@ -444,6 +472,8 @@ public class InventoryApp extends Application {
         String name = nameField.getText().trim();
         String priceText = priceField.getText().trim();
         String qtyText = qtyField.getText().trim();
+        String maxText = maxStockField.getText().trim();
+        String description = descriptionArea.getText().trim();
 
         if(name.isEmpty()){
             alert("Product name cannot be empty.");
@@ -483,17 +513,35 @@ public class InventoryApp extends Application {
             return;
         }
 
+        int maxStock;
+
+        try {
+            maxStock = Integer.parseInt(maxText);
+        } catch (NumberFormatException e){
+            alert("Max capacity must be a valid integer.");
+            return;
+        }
+
+        if(maxStock <= 0){
+            alert("Max capacity must be greater than 0.");
+            return;
+        }
+
+        if(quantity > maxStock){
+            alert("Initial quantity cannot exceed max capacity.");
+            return;
+        }
+
         int id = manager.generateProductId();
 
         manager.addProduct(
-                new Product(id, name, price),
+                new Product(id, name, price, maxStock, description),
                 quantity
         );
 
         refreshTable();
         clear();
     }
-
     private void deleteProduct() {
 
         Product p = table.getSelectionModel().getSelectedItem();
@@ -570,9 +618,11 @@ public class InventoryApp extends Application {
         nameField.clear();
         priceField.clear();
         qtyField.clear();
+        maxStockField.clear();
+        descriptionArea.clear();
     }
 
-    public static void main(String... args){
+    static void main(String... args){
         launch(args);
     }
 }
