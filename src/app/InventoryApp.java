@@ -18,7 +18,10 @@ import java.io.File;
 public class InventoryApp extends Application {
 
     private final StockManager manager = new StockManager();
+
     private final TableView<Product> table = new TableView<>();
+
+    private final StackPane contentArea = new StackPane();
 
     private final TextField nameField = new TextField();
     private final TextField priceField = new TextField();
@@ -27,25 +30,25 @@ public class InventoryApp extends Application {
     private final TextField maxStockField = new TextField();
     private final TextArea descriptionArea = new TextArea();
 
-
-
-    private final Label productsLabel = new Label();
-    private final Label criticalLabel = new Label();
-    private final Label warningLabel = new Label();
+    private final Button productsButton = new Button();
+    private final Button criticalButton = new Button();
+    private final Button warningButton = new Button();
+    private final Button outOfStockButton = new Button();
 
     @Override
     public void start(Stage stage) {
 
-        manager.loadFromFile();
+        manager.loadFromDatabase();
 
         BorderPane root = new BorderPane();
 
-        root.setTop(createToolbar());
-        root.setCenter(createTable());
-        root.setRight(createForm());
-        root.setBottom(createStatusBar());
+        root.setLeft(createSidebar());
 
-        Scene scene = new Scene(root, 1000, 600);
+        contentArea.getChildren().setAll(createProductsPage());
+
+        root.setCenter(contentArea);
+
+        Scene scene = new Scene(root, 1200, 650);
 
         scene.getStylesheets().add(
                 getClass()
@@ -60,6 +63,53 @@ public class InventoryApp extends Application {
         updateStatusBar();
     }
 
+    /* ================= SIDEBAR ================= */
+
+    private VBox createSidebar() {
+
+        Button products = new Button("Products");
+        Button sales = new Button("Sales");
+        Button dashboard = new Button("Dashboard");
+
+        products.setMaxWidth(Double.MAX_VALUE);
+        sales.setMaxWidth(Double.MAX_VALUE);
+        dashboard.setMaxWidth(Double.MAX_VALUE);
+
+        products.setOnAction(e ->
+                contentArea.getChildren().setAll(createProductsPage())
+        );
+
+        sales.setOnAction(e ->
+                contentArea.getChildren().setAll(new SalesPage(manager))
+        );
+
+        dashboard.setOnAction(e ->
+                contentArea.getChildren().setAll(new DashboardPage(manager))
+        );
+
+        VBox sidebar = new VBox(15, products, sales, dashboard);
+
+        sidebar.setPadding(new Insets(20));
+        sidebar.setPrefWidth(200);
+        sidebar.setStyle("-fx-background-color:#2c3e50;");
+
+        return sidebar;
+    }
+
+    /* ================= PRODUCTS PAGE ================= */
+
+    private BorderPane createProductsPage() {
+
+        BorderPane page = new BorderPane();
+
+        page.setTop(createToolbar());
+        page.setCenter(createTable());
+        page.setRight(createForm());
+        page.setBottom(createStatusBar());
+
+        return page;
+    }
+
     /* ================= TOOLBAR ================= */
 
     private ToolBar createToolbar() {
@@ -71,8 +121,7 @@ public class InventoryApp extends Application {
         export.setOnAction(e -> exportCSV());
 
         searchField.setPromptText("Search product...");
-        searchField.textProperty()
-                .addListener((a,b,c) -> search());
+        searchField.textProperty().addListener((a,b,c) -> search());
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -90,115 +139,63 @@ public class InventoryApp extends Application {
 
     private VBox createTable() {
 
-        table.setEditable(true);
+        table.setEditable(false);
 
-        /* ================= ID COLUMN ================= */
-
-        TableColumn<Product,Integer> id =
-                new TableColumn<>("ID");
+        TableColumn<Product,Integer> id = new TableColumn<>("ID");
 
         id.setCellValueFactory(d ->
                 new javafx.beans.property
                         .SimpleIntegerProperty(
                         d.getValue().id()).asObject());
 
-        id.setStyle("-fx-alignment:CENTER;");
         id.setPrefWidth(60);
 
 
 
-        /* ================= NAME COLUMN ================= */
-
-        TableColumn<Product,String> name =
-                new TableColumn<>("Name");
+        TableColumn<Product,String> name = new TableColumn<>("Name");
 
         name.setCellValueFactory(d ->
                 new javafx.beans.property
                         .SimpleStringProperty(
                         d.getValue().name()));
 
-        name.setCellFactory(TextFieldTableCell.forTableColumn());
-
-        name.setOnEditCommit(event -> {
-
-            Product product = event.getRowValue();
-            String newName = event.getNewValue();
-
-            if(newName == null || newName.trim().length() < 3){
-                alert("Name must contain at least 3 characters.");
-                refreshTable();
-                return;
-            }
-
-            manager.updateProductName(product.id(), newName.trim());
-            refreshTable();
-            table.refresh();
-        });
-
-        name.setPrefWidth(420);
+        name.setPrefWidth(350);
 
 
 
-        /* ================= PRICE COLUMN ================= */
-
-        TableColumn<Product,Double> price =
-                new TableColumn<>("Price");
+        TableColumn<Product,Double> price = new TableColumn<>("Price");
 
         price.setCellValueFactory(d ->
                 new javafx.beans.property
                         .SimpleDoubleProperty(
                         d.getValue().price()).asObject());
 
-        price.setStyle("-fx-alignment:CENTER;");
-        price.setPrefWidth(160);
+        price.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(Double value, boolean empty) {
 
-        price.setCellFactory(col ->
-                new TextFieldTableCell<>(
-                        new javafx.util.converter.DoubleStringConverter()) {
+                super.updateItem(value, empty);
 
-                    @Override
-                    public void updateItem(Double value, boolean empty) {
+                if(empty || value == null){
+                    setText(null);
+                    return;
+                }
 
-                        super.updateItem(value, empty);
-
-                        if(empty || value == null)
-                            setText(null);
-                        else
-                            setText(String.format("%.3f DT", value));
-                    }
-                });
-
-        price.setOnEditCommit(event -> {
-
-            Product product = event.getRowValue();
-            double newPrice = event.getNewValue();
-
-            if(newPrice < 0){
-                alert("Price cannot be negative.");
-                refreshTable();
-                return;
+                setText(String.format("%.3f DT", value));
             }
-
-            manager.updateProductPrice(product.id(), newPrice);
-            refreshTable();
-            table.refresh();
         });
 
+        price.setPrefWidth(120);
 
 
-        /* ================= QUANTITY COLUMN ================= */
 
-        TableColumn<Product,Integer> qty =
-                new TableColumn<>("Quantity");
+        TableColumn<Product,Integer> qty = new TableColumn<>("Quantity");
 
         qty.setCellValueFactory(d ->
                 new javafx.beans.property
                         .SimpleIntegerProperty(
                         manager.getQuantity(d.getValue()))
                         .asObject());
-
-        qty.setStyle("-fx-alignment:CENTER;");
-        qty.setPrefWidth(120);
 
         qty.setCellFactory(
                 TextFieldTableCell.forTableColumn(
@@ -210,23 +207,20 @@ public class InventoryApp extends Application {
             int newQty = event.getNewValue();
 
             if(newQty < 0){
-                alert("Quantity cannot be negative");
+                alert("Quantity cannot be negative.");
                 refreshTable();
                 return;
             }
 
             manager.updateProduct(product.id(), newQty);
-
             refreshTable();
-            table.refresh();
         });
 
+        qty.setPrefWidth(120);
 
 
-        /* ================= STOCK LEVEL COLUMN ================= */
 
-        TableColumn<Product, Product> stock =
-                new TableColumn<>("Stock Level");
+        TableColumn<Product, Product> stock = new TableColumn<>("Stock Level");
 
         stock.setCellValueFactory(data ->
                 new javafx.beans.property.SimpleObjectProperty<>(data.getValue()));
@@ -243,19 +237,18 @@ public class InventoryApp extends Application {
                     return;
                 }
 
-                double progress =
-                        manager.getStockRatio(product);
+                double progress = manager.getStockRatio(product);
+                int quantity = manager.getQuantity(product);
 
-                ProgressBar bar =
-                        new ProgressBar(progress);
+                ProgressBar bar = new ProgressBar(progress);
 
                 bar.setPrefWidth(140);
 
-                double ratio = manager.getStockRatio(product);
-
-                if(ratio <= 0.20)
+                if(quantity == 0)
+                    bar.setStyle("-fx-accent:#5a5a5a;");
+                else if(progress <= 0.20)
                     bar.setStyle("-fx-accent:#e74c3c;");
-                else if(ratio <= 0.50)
+                else if(progress <= 0.50)
                     bar.setStyle("-fx-accent:#f1c40f;");
                 else
                     bar.setStyle("-fx-accent:#3498db;");
@@ -264,26 +257,15 @@ public class InventoryApp extends Application {
             }
         });
 
-        stock.setPrefWidth(200);
+        stock.setPrefWidth(180);
 
 
 
-        /* ================= TABLE CONFIG ================= */
+        table.getColumns().setAll(id, name, price, qty, stock);
 
-        table.getColumns().setAll(
-                id,
-                name,
-                price,
-                qty,
-                stock
-        );
-
-        table.setColumnResizePolicy(
-                TableView.CONSTRAINED_RESIZE_POLICY);
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
 
 
-
-        /* =================Enable Double-Click Opening + ROW COLORING ================= */
 
         table.setRowFactory(tv -> {
 
@@ -294,10 +276,17 @@ public class InventoryApp extends Application {
 
                     super.updateItem(product, empty);
 
-                    getStyleClass().removeAll("critical", "warning");
+                    getStyleClass().removeAll("critical","warning","out");
 
                     if(product == null || empty)
                         return;
+
+                    int qty = manager.getQuantity(product);
+
+                    if(qty == 0){
+                        getStyleClass().add("out");
+                        return;
+                    }
 
                     double ratio = manager.getStockRatio(product);
 
@@ -314,11 +303,13 @@ public class InventoryApp extends Application {
 
                     Product product = row.getItem();
 
-                    new ProductDetailsView(
-                            manager,
-                            product,
-                            this::refreshTable
-                    ).show();
+                    contentArea.getChildren().setAll(
+                            new ProductDetailsView(
+                                    manager,
+                                    product,
+                                    () -> contentArea.getChildren().setAll(createProductsPage())
+                            ).createView()
+                    );
                 }
             });
 
@@ -328,8 +319,6 @@ public class InventoryApp extends Application {
         refreshTable();
 
         VBox box = new VBox(table);
-        box.setPadding(new Insets(10));
-
         VBox.setVgrow(table, Priority.ALWAYS);
 
         return box;
@@ -350,15 +339,8 @@ public class InventoryApp extends Application {
         descriptionArea.setPromptText("Product Description");
         descriptionArea.setPrefRowCount(4);
 
-        nameField.setMaxWidth(Double.MAX_VALUE);
-        priceField.setMaxWidth(Double.MAX_VALUE);
-        qtyField.setMaxWidth(Double.MAX_VALUE);
-        maxStockField.setMaxWidth(Double.MAX_VALUE);
-        descriptionArea.setMaxWidth(Double.MAX_VALUE);
-
         Button save = new Button("Save Product");
         save.setMaxWidth(Double.MAX_VALUE);
-        save.getStyleClass().add("save-button");
 
         save.setOnAction(e -> addProduct());
 
@@ -375,93 +357,86 @@ public class InventoryApp extends Application {
 
         form.setPadding(new Insets(20));
         form.setPrefWidth(260);
-        form.getStyleClass().add("form-card");
 
         return form;
     }
+
     /* ================= STATUS BAR ================= */
 
     private HBox createStatusBar() {
 
-        HBox productsBox =
-                createStatusBox(productsLabel,
-                        "#e3f2fd", "#1565c0");
+        VBox productsCard = createStatusCard(productsButton, "Products", "status-products");
+        VBox criticalCard = createStatusCard(criticalButton, "Critical", "status-critical");
+        VBox warningCard = createStatusCard(warningButton, "Warning", "status-warning");
+        VBox outCard = createStatusCard(outOfStockButton, "Out of Stock", "status-out");
 
-        HBox criticalBox =
-                createStatusBox(criticalLabel,
-                        "#ffcdd2", "#b71c1c");
-
-        HBox warningBox =
-                createStatusBox(warningLabel,
-                        "#fff3cd", "#ff8f00");
-
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        HBox bar = new HBox(
-                15,
-                productsBox,
-                criticalBox,
-                warningBox,
-                spacer
+        productsButton.setOnAction(e ->
+                table.setItems(manager.getObservableProducts())
         );
 
-        bar.setPadding(new Insets(8));
-        bar.getStyleClass().add("status");
+        criticalButton.setOnAction(e ->
+                table.setItems(
+                        manager.getObservableProducts()
+                                .filtered(p -> {
+                                    double r = manager.getStockRatio(p);
+                                    return r > 0 && r <= 0.20;
+                                })
+                )
+        );
+
+        warningButton.setOnAction(e ->
+                table.setItems(
+                        manager.getObservableProducts()
+                                .filtered(p -> {
+                                    double r = manager.getStockRatio(p);
+                                    return r > 0.20 && r <= 0.50;
+                                }))
+        );
+
+        outOfStockButton.setOnAction(e ->
+                table.setItems(
+                        manager.getObservableProducts()
+                                .filtered(p ->
+                                        manager.getQuantity(p) == 0))
+        );
+
+        HBox bar = new HBox(3,
+                productsCard,
+                criticalCard,
+                warningCard,
+                outCard
+        );
+        bar.setAlignment(Pos.CENTER_LEFT);
+
+        bar.setPadding(new Insets(10));
 
         return bar;
     }
+    private VBox createStatusCard(Button button, String title, String style) {
 
-    private HBox createStatusBox(
-            Label label,
-            String bgColor,
-            String textColor) {
+        Label label = new Label(title);
+        label.getStyleClass().add("status-title");
 
-        label.getStyleClass().add("status-label");
+        button.getStyleClass().add(style);
+        button.getStyleClass().add("status-number");
 
-        HBox box = new HBox(label);
+        VBox box = new VBox(3, label, button);
+
         box.setAlignment(Pos.CENTER);
-        box.setPadding(new Insets(8,16,8,16));
-
         box.getStyleClass().add("status-card");
 
-        box.setStyle(
-                "-fx-background-color:" + bgColor + ";"
-        );
+        box.setPadding(new Insets(3,6,3,6));
+
+        /* make entire card clickable */
+        box.setOnMouseClicked(e -> button.fire());
 
         return box;
     }
 
-    /* ================= STATUS UPDATE ================= */
-
-    private void updateStatusBar() {
-
-        var products =
-                manager.getObservableProducts();
-
-        int total = products.size();
-
-        long critical =
-                products.stream()
-                        .filter(p -> manager.getStockRatio(p) <= 0.20)
-                        .count();
-
-        long warning =
-                products.stream()
-                        .filter(p -> {
-                            double r = manager.getStockRatio(p);
-                            return r > 0.20 && r <= 0.50;
-                        })
-                        .count();
-
-        productsLabel.setText("Products: " + total);
-        criticalLabel.setText("Critical: " + critical);
-        warningLabel.setText("Warning: " + warning);
-    }
 
     /* ================= LOGIC ================= */
-
     private void refreshTable() {
+
         table.setItems(manager.getObservableProducts());
         updateStatusBar();
         table.refresh();
@@ -542,6 +517,7 @@ public class InventoryApp extends Application {
         refreshTable();
         clear();
     }
+
     private void deleteProduct() {
 
         Product p = table.getSelectionModel().getSelectedItem();
@@ -552,8 +528,13 @@ public class InventoryApp extends Application {
         }
 
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+
         confirm.setTitle("Delete Confirmation");
-        confirm.setHeaderText("Are you sure you want to delete this product?");
+
+        confirm.setHeaderText(
+                "Are you sure you want to delete this product?"
+        );
+
         confirm.setContentText(
                 "Product: " + p.name() +
                         "\nID: " + p.id()
@@ -565,8 +546,11 @@ public class InventoryApp extends Application {
         confirm.getButtonTypes().setAll(yes, no);
 
         confirm.showAndWait().ifPresent(response -> {
+
             if(response == yes){
+
                 manager.deleteProduct(p.id());
+
                 refreshTable();
             }
         });
@@ -574,8 +558,7 @@ public class InventoryApp extends Application {
 
     private void search() {
 
-        String text =
-                searchField.getText().toLowerCase();
+        String text = searchField.getText().toLowerCase();
 
         table.setItems(
                 manager.getObservableProducts()
@@ -586,8 +569,18 @@ public class InventoryApp extends Application {
     }
 
     private void alert(String msg){
+
         new Alert(Alert.AlertType.INFORMATION,msg)
                 .showAndWait();
+    }
+
+    private void clear(){
+
+        nameField.clear();
+        priceField.clear();
+        qtyField.clear();
+        maxStockField.clear();
+        descriptionArea.clear();
     }
 
     private void exportCSV() {
@@ -614,14 +607,35 @@ public class InventoryApp extends Application {
         }
     }
 
-    private void clear(){
-        nameField.clear();
-        priceField.clear();
-        qtyField.clear();
-        maxStockField.clear();
-        descriptionArea.clear();
-    }
+    private void updateStatusBar() {
 
+        var products = manager.getObservableProducts();
+
+        int total = products.size();
+
+        long critical =
+                products.stream()
+                        .filter(p -> manager.getStockRatio(p) <= 0.20)
+                        .count();
+
+        long warning =
+                products.stream()
+                        .filter(p -> {
+                            double r = manager.getStockRatio(p);
+                            return r > 0.20 && r <= 0.50;
+                        })
+                        .count();
+
+        long out =
+                products.stream()
+                        .filter(p -> manager.getQuantity(p) == 0)
+                        .count();
+
+        productsButton.setText(String.valueOf(total));
+        criticalButton.setText(String.valueOf(critical));
+        warningButton.setText(String.valueOf(warning));
+        outOfStockButton.setText(String.valueOf(out));
+    }
     static void main(String... args){
         launch(args);
     }

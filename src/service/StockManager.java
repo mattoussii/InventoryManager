@@ -1,170 +1,227 @@
 package service;
 
-import java.io.*;
-import java.util.TreeMap;
-
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import model.Product;
-import model.StockItem;
 import model.Sale;
+
+import java.sql.*;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
 public class StockManager {
 
-    /* ===============================
-       SORTED STORAGE (AUTO BY ID)
-       =============================== */
-    private final TreeMap<Integer, StockItem> stock =
-            new TreeMap<>();
-
-    private int nextId = 1;
-
-    /* ===============================
-       OBSERVABLE PRODUCT LIST
-       =============================== */
     private final ObservableList<Product> products =
             FXCollections.observableArrayList();
+
+    private Connection connect() throws SQLException {
+        return DriverManager.getConnection("jdbc:sqlite:inventory.db");
+    }
 
     public ObservableList<Product> getObservableProducts() {
         return products;
     }
 
-    /* ===============================
-       AUTO PRODUCT ID
-       =============================== */
     public int generateProductId() {
-        return nextId++;
+
+        try (Connection conn = connect();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT MAX(id) FROM products")) {
+
+            if (rs.next())
+                return rs.getInt(1) + 1;
+
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+        }
+
+        return 1;
+    }
+
+    /* ===============================
+       LOAD PRODUCTS FROM DATABASE
+       =============================== */
+
+    public void loadFromDatabase() {
+
+        products.clear();
+
+        try (Connection conn = connect();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT * FROM products")) {
+
+            while (rs.next()) {
+
+                Product p = new Product(
+                        rs.getInt("id"),
+                        rs.getString("name"),
+                        rs.getDouble("price"),
+                        rs.getInt("max_stock"),
+                        rs.getString("description")
+                );
+
+                products.add(p);
+            }
+
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+        }
     }
 
     /* ===============================
        ADD PRODUCT
        =============================== */
+
     public void addProduct(Product product, int quantity) {
 
-        if (stock.containsKey(product.id())) {
-            System.out.println("Product already exists.");
-            return;
+        try (Connection conn = connect();
+             PreparedStatement ps =
+                     conn.prepareStatement(
+                             "INSERT INTO products VALUES (?,?,?,?,?,?)")) {
+
+            ps.setInt(1, product.id());
+            ps.setString(2, product.name());
+            ps.setDouble(3, product.price());
+            ps.setInt(4, quantity);
+            ps.setInt(5, product.maxStock());
+            ps.setString(6, product.description());
+
+            ps.executeUpdate();
+
+            products.add(product);
+
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
         }
-
-        stock.put(product.id(),
-                new StockItem(product, quantity));
-
-        products.add(product);
-
-        saveToFile();
-    }
-
-    /* ===============================
-       FIND PRODUCT
-       =============================== */
-    public Product findProductById(int id) {
-
-        StockItem item = stock.get(id);
-        return item == null ? null : item.getProduct();
     }
 
     /* ===============================
        DELETE PRODUCT
        =============================== */
+
     public void deleteProduct(int id) {
 
-        StockItem item = stock.remove(id);
+        try (Connection conn = connect();
+             PreparedStatement ps =
+                     conn.prepareStatement(
+                             "DELETE FROM products WHERE id=?")) {
 
-        if (item != null) {
-            products.remove(item.getProduct());
-            saveToFile();
+            ps.setInt(1, id);
+            ps.executeUpdate();
+
+            products.removeIf(p -> p.id() == id);
+
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
         }
     }
 
     /* ===============================
        GET QUANTITY
        =============================== */
+
     public int getQuantity(Product product) {
 
-        StockItem item = stock.get(product.id());
-        return item == null ? 0 : item.getQuantity();
-    }
+        try (Connection conn = connect();
+             PreparedStatement ps =
+                     conn.prepareStatement(
+                             "SELECT quantity FROM products WHERE id=?")) {
 
-    /* ===============================
-       UPDATE NAME
-       =============================== */
-    public void updateProductName(int id, String newName) {
+            ps.setInt(1, product.id());
 
-        if (newName == null || newName.trim().length() < 3)
-            return;
+            ResultSet rs = ps.executeQuery();
 
-        StockItem item = stock.get(id);
-        if (item == null) return;
+            if (rs.next())
+                return rs.getInt("quantity");
 
-        Product old = item.getProduct();
-
-        Product updated =
-                new Product(
-                        old.id(),
-                        newName,
-                        old.price(),
-                        old.maxStock(),
-                        old.description()
-                );
-
-        item.setProduct(updated);
-
-        products.remove(old);
-        products.add(updated);
-
-        saveToFile();
-    }
-
-    /* ===============================
-       UPDATE PRICE
-       =============================== */
-    public void updateProductPrice(int id, double newPrice) {
-
-        if (newPrice < 0) return;
-
-        StockItem item = stock.get(id);
-        if (item == null) return;
-
-        Product old = item.getProduct();
-
-        Product updated =
-                new Product(
-                        old.id(),
-                        old.name(),
-                        newPrice,
-                        old.maxStock(),
-                        old.description()
-                );
-
-        item.setProduct(updated);
-
-        products.remove(old);
-        products.add(updated);
-
-        saveToFile();
-    }
-
-    /* ===============================
-       UPDATE QUANTITY
-       =============================== */
-    public void updateProduct(int id, int newQuantity) {
-
-        if (newQuantity < 0) return;
-
-        StockItem item = stock.get(id);
-
-        if (item == null) {
-            System.out.println("Product not found.");
-            return;
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
         }
 
-        item.setQuantity(newQuantity);
-        saveToFile();
+        return 0;
+    }
+
+    /* ===============================
+       UPDATE PRODUCT
+       =============================== */
+
+    public void updateProduct(int id, int newQuantity) {
+
+        try (Connection conn = connect();
+             PreparedStatement ps =
+                     conn.prepareStatement(
+                             "UPDATE products SET quantity=? WHERE id=?")) {
+
+            ps.setInt(1, newQuantity);
+            ps.setInt(2, id);
+
+            ps.executeUpdate();
+
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+        }
+    }
+
+    public void updateProductFull( int id, String name, double price, int maxStock, String description){
+
+        try (var conn = connect();
+             var ps = conn.prepareStatement(
+                     "UPDATE products SET name=?, price=?, max_stock=?, description=? WHERE id=?")) {
+
+            ps.setString(1, name);
+            ps.setDouble(2, price);
+            ps.setInt(3, maxStock);
+            ps.setString(4, description);
+            ps.setInt(5, id);
+
+            ps.executeUpdate();
+
+            // refresh product list in UI
+            loadFromDatabase();
+
+        } catch (Exception e) {
+            System.err.println("Product update failed: " + e.getMessage());
+        }
+    }
+
+    /* ===============================
+       STOCK ADJUSTMENT
+       =============================== */
+
+    public void adjustStock(int productId, int change) {
+
+        int current = 0;
+
+        try (Connection conn = connect();
+             PreparedStatement ps =
+                     conn.prepareStatement(
+                             "SELECT quantity FROM products WHERE id=?")) {
+
+            ps.setInt(1, productId);
+
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next())
+                current = rs.getInt("quantity");
+
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+        }
+
+        int newQty = current + change;
+
+        if (newQty < 0)
+            throw new IllegalArgumentException("Stock cannot be negative");
+
+        updateProduct(productId, newQty);
     }
 
     /* ===============================
        SELL PRODUCT
        =============================== */
+
     public boolean sellProduct(
             int productId,
             int qty,
@@ -172,32 +229,45 @@ public class StockManager {
             String clientPhone
     ) {
 
-        StockItem item = stock.get(productId);
+        int currentQty = 0;
+        double price = 0;
+        String name = "";
 
-        if (item == null)
+        try (Connection conn = connect();
+             PreparedStatement ps =
+                     conn.prepareStatement(
+                             "SELECT * FROM products WHERE id=?")) {
+
+            ps.setInt(1, productId);
+
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+
+                currentQty = rs.getInt("quantity");
+                price = rs.getDouble("price");
+                name = rs.getString("name");
+
+            }
+
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+        }
+
+        if (qty <= 0 || currentQty < qty)
             return false;
 
-        if (qty <= 0)
-            return false;
-
-        if (item.getQuantity() < qty)
-            return false;
-
-        item.setQuantity(item.getQuantity() - qty);
-
-        Product product = item.getProduct();
+        updateProduct(productId, currentQty - qty);
 
         logSale(new Sale(
-                product.id(),
-                product.name(),
+                productId,
+                name,
                 clientName,
                 clientPhone,
                 qty,
-                product.price(),
+                price,
                 System.currentTimeMillis()
         ));
-
-        saveToFile();
 
         return true;
     }
@@ -205,163 +275,85 @@ public class StockManager {
     /* ===============================
        LOG SALE
        =============================== */
+
     private void logSale(Sale sale) {
 
-        try (FileWriter fw =
-                     new FileWriter("sales_log.csv", true)) {
+        try (Connection conn = connect();
+             PreparedStatement ps =
+                     conn.prepareStatement(
+                             "INSERT INTO sales(product_id,product_name,client_name,client_phone,quantity,price,date) VALUES (?,?,?,?,?,?,?)")) {
 
-            fw.write(
-                    sale.productId() + "," +
-                            sale.productName() + "," +
-                            sale.clientName() + "," +
-                            sale.clientPhone() + "," +
-                            sale.quantity() + "," +
-                            sale.price() + "," +
-                            sale.timestamp() + "\n"
-            );
+            LocalDateTime date =
+                    LocalDateTime.ofInstant(
+                            Instant.ofEpochMilli(sale.timestamp()),
+                            ZoneId.systemDefault()
+                    );
 
-        } catch (IOException e) {
-            System.out.println("Error logging sale.");
+            DateTimeFormatter formatter =
+                    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+            ps.setInt(1, sale.productId());
+            ps.setString(2, sale.productName());
+            ps.setString(3, sale.clientName());
+            ps.setString(4, sale.clientPhone());
+            ps.setInt(5, sale.quantity());
+            ps.setDouble(6, sale.price());
+            ps.setString(7, date.format(formatter));
+
+            ps.executeUpdate();
+
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
         }
     }
 
     /* ===============================
-       LOW STOCK ALERT
+       STOCK RATIO
        =============================== */
-    public void lowStockAlert() {
 
-        boolean found = false;
-
-        for (StockItem item : stock.values()) {
-
-            if (item.getQuantity() < 5) {
-
-                System.out.println(
-                        "Low stock: "
-                                + item.getProduct().name()
-                                + " (Qty: "
-                                + item.getQuantity() + ")");
-
-                found = true;
-            }
-        }
-
-        if (!found)
-            System.out.println("No low stock products.");
-    }
-
-    /* ===============================
-       SAVE FILE
-       =============================== */
-    public void saveToFile() {
-
-        try (FileWriter fw = new FileWriter("stock.txt")) {
-
-            for (StockItem item : stock.values()) {
-
-                Product p = item.getProduct();
-
-                fw.write(
-                        p.id() + "," +
-                                p.name() + "," +
-                                p.price() + "," +
-                                item.getQuantity() + "\n");
-            }
-
-        } catch (IOException e) {
-            System.out.println("Error saving file.");
-        }
-    }
-
-    /* ===============================
-       LOAD FILE
-       =============================== */
-    public void loadFromFile() {
-
-        File file = new File("stock.txt");
-
-        if (!file.exists()) {
-            System.out.println("No previous stock found.");
-            return;
-        }
-
-        try (BufferedReader br =
-                     new BufferedReader(new FileReader(file))) {
-
-            String line;
-
-            while ((line = br.readLine()) != null) {
-
-                String[] data = line.split(",");
-
-                int id = Integer.parseInt(data[0]);
-                String name = data[1];
-                double price = Double.parseDouble(data[2]);
-                int quantity = Integer.parseInt(data[3]);
-
-                Product p = new Product(id, name, price,100,"");
-
-                stock.put(id,
-                        new StockItem(p, quantity));
-
-                products.add(p);
-
-                if (id >= nextId)
-                    nextId = id + 1;
-            }
-
-            System.out.println("Stock loaded successfully.");
-
-        } catch (IOException e) {
-            System.out.println("Error loading stock.");
-        }
-    }
-
-    /* ===============================
-       EXPORT TO CSV
-       =============================== */
-    public void exportToCSV(File file) {
-
-        try (FileWriter fw = new FileWriter(file)) {
-
-            fw.write("ID;Name;Price;Quantity\n");
-
-            for (StockItem item : stock.values()) {
-
-                Product p = item.getProduct();
-
-                fw.write(
-                        p.id() + ";" +
-                                p.name() + ";" +
-                                p.price() + ";" +
-                                item.getQuantity() + "\n"
-                );
-            }
-
-            System.out.println("CSV export successful.");
-
-        } catch (IOException e) {
-            System.out.println("Error exporting CSV.");
-        }
-    }
-
-    /* ===============================
-      get Stock lvl of max stock
-       =============================== */
     public double getStockRatio(Product product) {
 
-        StockItem item = stock.get(product.id());
+        int qty = getQuantity(product);
 
-        if (item == null)
-            return 0;
-
-        int quantity = item.getQuantity();
         int max = product.maxStock();
 
         if (max == 0)
             return 0;
 
-        return (double) quantity / max;
+        return (double) qty / max;
     }
+
+    public void exportToCSV(java.io.File file) {
+
+        try (
+                Connection conn = connect();
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery("SELECT * FROM products");
+                java.io.FileWriter fw = new java.io.FileWriter(file)
+        ) {
+
+            fw.write("ID;Name;Price;Quantity\n");
+
+            while (rs.next()) {
+
+                fw.write(
+                        rs.getInt("id") + ";" +
+                                rs.getString("name") + ";" +
+                                rs.getDouble("price") + ";" +
+                                rs.getInt("quantity") + "\n"
+                );
+            }
+
+            System.out.println("CSV export successful.");
+
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+        }
+    }
+
+
+
+
+
 
 }
