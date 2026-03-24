@@ -5,6 +5,9 @@ import javafx.collections.ObservableList;
 import model.Product;
 import model.Sale;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
+
 import java.sql.*;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -79,7 +82,7 @@ public class StockManager {
         try (Connection conn = connect();
              PreparedStatement ps =
                      conn.prepareStatement(
-                             "INSERT INTO products VALUES (?,?,?,?,?,?)")) {
+                             "INSERT INTO products VALUES (?,?,?,?,?,?,?)")) {
 
             ps.setInt(1, product.id());
             ps.setString(2, product.name());
@@ -87,6 +90,7 @@ public class StockManager {
             ps.setInt(4, quantity);
             ps.setInt(5, product.maxStock());
             ps.setString(6, product.description());
+            ps.setString(7, "");
 
             ps.executeUpdate();
 
@@ -351,8 +355,63 @@ public class StockManager {
         }
     }
 
+    public void loadProductsFromCSV(String filePath) {
 
+        try (
+                BufferedReader reader = new BufferedReader(new FileReader(filePath));
+                Connection conn = connect();
+                PreparedStatement check =
+                        conn.prepareStatement(
+                                "SELECT id FROM products WHERE id=?");
+                PreparedStatement insert =
+                        conn.prepareStatement(
+                                "INSERT INTO products (id,name,price,quantity,max_stock,description) VALUES (?,?,?,?,?,?)")
+        ) {
 
+            String line;
+
+            reader.readLine(); // skip header
+
+            while ((line = reader.readLine()) != null) {
+
+                String[] data = line.split(";");
+
+                int id = Integer.parseInt(data[0]);
+                String name = data[1];
+                double price = Double.parseDouble(data[2]);
+                int quantity = Integer.parseInt(data[3]);
+
+                int maxStock = 100;
+                String description = "";
+
+                /* check if product already exists */
+
+                check.setInt(1, id);
+
+                ResultSet rs = check.executeQuery();
+
+                if (rs.next()) {
+                    continue; // skip duplicate product
+                }
+
+                insert.setInt(1, id);
+                insert.setString(2, name);
+                insert.setDouble(3, price);
+                insert.setInt(4, quantity);
+                insert.setInt(5, maxStock);
+                insert.setString(6, description);
+
+                insert.executeUpdate();
+
+                products.add(new Product(id, name, price, maxStock, description));
+            }
+
+            System.out.println("CSV import finished. Only new products were added.");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
 
 

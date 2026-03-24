@@ -115,9 +115,11 @@ public class InventoryApp extends Application {
     private ToolBar createToolbar() {
 
         Button export = new Button("Export CSV");
+        Button load = new Button("Load CSV");
         Button delete = new Button("Delete");
 
         delete.setOnAction(e -> deleteProduct());
+        load.setOnAction(e -> loadCSV());
         export.setOnAction(e -> exportCSV());
 
         searchField.setPromptText("Search product...");
@@ -129,6 +131,7 @@ public class InventoryApp extends Application {
         return new ToolBar(
                 delete,
                 export,
+                load,
                 new Separator(),
                 spacer,
                 searchField
@@ -604,6 +607,31 @@ public class InventoryApp extends Application {
 
             manager.exportToCSV(file);
             alert("Stock exported successfully.");
+        }
+    }
+    private void loadCSV() {
+
+        javafx.stage.FileChooser fileChooser =
+                new javafx.stage.FileChooser();
+
+        fileChooser.setTitle("Open CSV File");
+
+        fileChooser.getExtensionFilters().add(
+                new javafx.stage.FileChooser.ExtensionFilter(
+                        "CSV Files", "*.csv")
+        );
+
+        File file =
+                fileChooser.showOpenDialog(
+                        table.getScene().getWindow());
+
+        if(file != null) {
+
+            manager.loadProductsFromCSV(file.getAbsolutePath());
+
+            refreshTable();
+
+            alert("CSV loaded successfully.");
         }
     }
 
