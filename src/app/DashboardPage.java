@@ -208,7 +208,7 @@ public class DashboardPage extends VBox {
 
         XYChart.Series<String,Number> series = new XYChart.Series<>();
 
-        try (var conn = DriverManager.getConnection("jdbc:sqlite:inventory.db");
+        try (var conn = DriverManager.getConnection("JDBC:sqlite:inventory.db");
              var stmt = conn.createStatement();
              var rs = stmt.executeQuery(
                      "SELECT date, SUM(quantity) as qty FROM sales GROUP BY date")) {

@@ -3,6 +3,7 @@ package service;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import model.Product;
+import model.ProductRepository;
 import model.Sale;
 
 import java.io.BufferedReader;
@@ -13,13 +14,15 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
-public class StockManager {
+public class StockManager extends DatabaseManager implements ProductRepository {
 
     private final ObservableList<Product> products =
             FXCollections.observableArrayList();
 
-    private Connection connect() throws SQLException {
+    @Override
+    protected Connection connect() throws SQLException {
         return DriverManager.getConnection("jdbc:sqlite:inventory.db");
     }
 
@@ -413,6 +416,13 @@ public class StockManager {
         }
     }
 
+    @Override
+    public Product getProductById(int id) {
+        return products.stream()
+                .filter(p -> p.id() == id)
+                .findFirst()
+                .orElse(null);
+    }
 
 
 }

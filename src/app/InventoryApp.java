@@ -114,8 +114,8 @@ public class InventoryApp extends Application {
 
     private ToolBar createToolbar() {
 
-        Button export = new Button("Export CSV");
-        Button load = new Button("Load CSV");
+        Button export = new Button("Export Products");
+        Button load = new Button("Load Products");
         Button delete = new Button("Delete");
 
         delete.setOnAction(e -> deleteProduct());
